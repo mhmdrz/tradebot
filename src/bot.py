@@ -3,6 +3,7 @@ import pandas as pd
 from strategies import zscore, trend
 from utils import sessions, botlog, utils
 import time
+import numpy as np
 
 class Bot:
     def __init__(self, symbol, timeframe, lot_size, balance_percentage, sl_pips, tp_pips, trailing_pips, rr_ratio):
@@ -36,14 +37,20 @@ class Bot:
         data = self.get_data()
         data = trend.calculate_swing_trend(data)
         data = zscore.calculate(data, 20, 4)
-        latest = data.iloc[-1]
-        print(latest)
-        botlog.logger.info(latest)
-        return latest
+        # latest = data.iloc[-1]
+        # print(latest)
+        # botlog.logger.info(latest)
+        return data
     
     def calculate_lot_size(self, balance):
         lot_size = (balance * self.balance_percentage * 0.01) * (self.sl_pips * 0.0001 * 10)
         return round(lot_size, 2)
+    
+    def calculate_dynamic_sl(self, data, window):
+        prices = data['close']
+        sl_pips = 0.5 * np.std(prices[-window:])
+
+        return sl_pips
     
     def manage_trailing(self, order_ticket, order_type):
         while True:
@@ -66,8 +73,10 @@ class Bot:
                 result = mt5.order_send(request)
                 if result.retcode != mt5.TRADE_RETCODE_DONE:
                     print(f"Failed to update trailing stop: {result.retcode}")
+                    botlog.logger.info(f"Failed to update trailing stop: {result.retcode}")
                 else:
                     print(f"Trailing stop updated to: {new_sl_price}")
+                    botlog.logger.info(f"Trailing stop updated to: {new_sl_price}")
             
             time.sleep(25)
     
@@ -95,8 +104,10 @@ class Bot:
         result = mt5.order_send(request)
         if result.retcode != mt5.TRADE_RETCODE_DONE:
             print(f"Order failed: {result.retcode}")
+            botlog.logger.info(f"Order failed: {result.retcode}")
         else:
             print(f"Order placed successfully: {result}")
+            botlog.logger.info(f"Order placed successfully: {result}")
             order_ticket = result.order
             if self.trailing_pips:
                 self.manage_trailing(order_ticket, order_type)
@@ -116,6 +127,10 @@ class Bot:
                 lot_size = self.calculate_lot_size(balance)
 
             data = self.calculate_signals()
+            latest = data.iloc[-1]
+            print(latest)
+            botlog.logger.info(latest)
+
             ask_price = mt5.symbol_info_tick(self.symbol).ask
             bid_price = mt5.symbol_info_tick(self.symbol).bid
             decimal = utils.count_price_decimals(ask_price)
@@ -124,18 +139,20 @@ class Bot:
                 sl_pips = self.sl_pips * 0.0001
             elif self.sl_pips and decimal <= 2:
                 sl_pips = self.sl_pips * 0.01
+            else:
+                sl_pips = self.calculate_dynamic_sl(data, 20)
 
             if self.tp_pips and decimal > 2:
                 tp_pips = self.tp_pips * 0.0001
             elif self.tp_pips and decimal <= 2:
                 tp_pips = self.tp_pips * 0.01
             
-            if data['z_score'] < -2:
-                sl_price = ask_price - sl_pips if self.sl_pips else zscore.calculate_dynamic_sl()
+            if latest['z_score'] < -2 and latest['trend'] == 'uptrend':
+                sl_price = ask_price - sl_pips
                 tp_price = ask_price + tp_pips if self.tp_pips else ask_price + (sl_pips * self.rr_ratio)
                 self.place_order('buy', lot_size, ask_price, sl_price, tp_price)
-            elif data['z_score'] > 2:
-                sl_price = bid_price + sl_pips if self.sl_pips else zscore.calculate_dynamic_sl()
+            elif latest['z_score'] > 2 and latest['trend'] == 'downtrend':
+                sl_price = bid_price + sl_pips
                 tp_price = bid_price - tp_pips if self.tp_pips else bid_price - (sl_pips * self.rr_ratio)
                 self.place_order('sell', lot_size, bid_price, sl_price, tp_price)
             
