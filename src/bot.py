@@ -1,9 +1,10 @@
 import MetaTrader5 as mt5
 import pandas as pd
 from strategies import zscore, trend
-from utils import sessions, botlog, utils
-import time
+from utils import sessions, botlog, utils, crawler
 import numpy as np
+import asyncio
+from datetime import datetime, timedelta
 
 class Bot:
     def __init__(self, symbol, timeframe, lot_size, balance_percentage, sl_pips, tp_pips, trailing_pips, rr_ratio):
@@ -37,9 +38,7 @@ class Bot:
         data = self.get_data()
         data = trend.calculate_swing_trend(data)
         data = zscore.calculate(data, 20, 4)
-        # latest = data.iloc[-1]
-        # print(latest)
-        # botlog.logger.info(latest)
+
         return data
     
     def calculate_lot_size(self, balance):
@@ -52,7 +51,7 @@ class Bot:
 
         return sl_pips
     
-    def manage_trailing(self, order_ticket, order_type):
+    async def manage_trailing(self, order_ticket, order_type):
         while True:
             positions = mt5.positions_get(ticket=order_ticket)
             if not positions:
@@ -78,9 +77,9 @@ class Bot:
                     print(f"Trailing stop updated to: {new_sl_price}")
                     botlog.logger.info(f"Trailing stop updated to: {new_sl_price}")
             
-            time.sleep(25)
+            await asyncio.sleep(25)
     
-    def place_order(self, order_type, lot_size, price, sl_price, tp_price):
+    async def place_order(self, order_type, lot_size, price, sl_price, tp_price):
         if order_type == 'buy':
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
@@ -110,14 +109,21 @@ class Bot:
             botlog.logger.info(f"Order placed successfully: {result}")
             order_ticket = result.order
             if self.trailing_pips:
-                self.manage_trailing(order_ticket, order_type)
+                await self.manage_trailing(order_ticket, order_type)
     
-    def loop(self):
+    async def bot_loop(self, event_times):
         while True:
+            current_time = datetime.now().time()
             self.is_market_open = sessions.market_time_check()
 
             if not self.is_market_open:
-                return
+                await asyncio.sleep(3600)
+
+            for t in event_times:
+                time_diff = timedelta(hours=t.hour, minutes=t.minute) - timedelta(hours=current_time.hour, minutes=current_time.minute)
+                if time_diff == timedelta(minutes=10):
+                    await asyncio.sleep(1200)
+                    break
 
             balance = mt5.account_info().balance
 
@@ -147,13 +153,30 @@ class Bot:
             elif self.tp_pips and decimal <= 2:
                 tp_pips = self.tp_pips * 0.01
             
-            if latest['z_score'] < -2 and latest['trend'] == 'uptrend':
+            if latest['z_score'] < -2 and latest['trend'] == 'range':
                 sl_price = ask_price - sl_pips
                 tp_price = ask_price + tp_pips if self.tp_pips else ask_price + (sl_pips * self.rr_ratio)
                 self.place_order('buy', lot_size, ask_price, sl_price, tp_price)
-            elif latest['z_score'] > 2 and latest['trend'] == 'downtrend':
+            elif latest['z_score'] > 2 and latest['trend'] == 'range':
                 sl_price = bid_price + sl_pips
                 tp_price = bid_price - tp_pips if self.tp_pips else bid_price - (sl_pips * self.rr_ratio)
                 self.place_order('sell', lot_size, bid_price, sl_price, tp_price)
             
-            time.sleep(60)
+            await asyncio.sleep(60)
+        
+    async def get_events(self):
+        events = await crawler.get_events('https://forexfactory.com/', headers={ "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:129.0) Gecko/20100101 Firefox/129.0" })
+        events = crawler.fill_empty_times(events)
+        return crawler.extract_times(events)
+    
+    async def main_loop(self):
+        times = await self.get_events()
+
+        while True:
+            next_loop = datetime.now() + timedelta(hours=24)
+            times = await self.get_events()
+            while datetime.now() < next_loop:
+                await self.bot_loop(times)
+    
+    async def main(self):
+        await self.main_loop()

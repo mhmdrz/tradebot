@@ -1,5 +1,6 @@
 from bot import Bot
 import MetaTrader5 as mt5
+import asyncio
 
 if __name__ == "__main__":
     bot = Bot(
@@ -13,6 +14,6 @@ if __name__ == "__main__":
         rr_ratio=2
     )
     try:
-        bot.loop()
+        asyncio.run(bot.main())
     except KeyboardInterrupt:
         bot.shutdown()
