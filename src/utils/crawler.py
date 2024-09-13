@@ -36,7 +36,7 @@ def fill_empty_times(events):
 def extract_times(events):
     times = []
     for x in events:
-        if 'ora' in x['impact']:
+        if 'red' in x['impact']:
             times.append(x['time'])
     times = list(set(times))
     times = list(filter(lambda x: any(strs in x for strs in ['am', 'pm']), times))
