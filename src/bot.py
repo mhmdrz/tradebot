@@ -153,11 +153,11 @@ class Bot:
             elif self.tp_pips and decimal <= 2:
                 tp_pips = self.tp_pips * 0.01
             
-            if latest['z_score'] < -2:
+            if latest['bullish'] and latest['close'] < latest['ema']:
                 sl_price = ask_price - sl_pips
                 tp_price = ask_price + tp_pips if self.tp_pips else ask_price + (sl_pips * self.rr_ratio)
                 self.place_order('buy', lot_size, ask_price, sl_price, tp_price)
-            elif latest['z_score'] > 2:
+            elif not latest['bullish'] and latest['close'] > latest['ema']:
                 sl_price = bid_price + sl_pips
                 tp_price = bid_price - tp_pips if self.tp_pips else bid_price - (sl_pips * self.rr_ratio)
                 self.place_order('sell', lot_size, bid_price, sl_price, tp_price)
