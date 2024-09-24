@@ -11,3 +11,25 @@ def calculate_swing_trend(data):
         data['trend'] = 'range'
     
     return data
+
+def calculate_ema(data, period):
+    data['ema'] = data['close'].ewm(period, adjust=False).mean()
+    return data
+
+def calculate_g(data, length):
+    a = [0] * len(data)
+    b = [0] * len(data)
+
+    for i in range(1, len(data)):
+        a[i] = max(data['close'][i], a[i-1]) - (a[i-1] - b[i-1]) / length
+        b[i] = min(data['close'][i], b[i-1]) + (a[i-1] - b[i-1]) / length
+    
+    data['a'] = a
+    data['b'] = b
+    data['g_avg'] = (data['a'] + data['b']) / 2
+
+    data['crossup'] = (data['b'].shift(1) < data['close'].shift(1)) & (data['b'] > data['close'])
+    data['crossdn'] = (data['a'].shift(1) < data['close'].shift(1)) & (data['a'] > data['close'])
+    data['bullish'] = data.apply(lambda row: row['crossdn'] <= row['crossup'], axis=1)
+
+    return data
