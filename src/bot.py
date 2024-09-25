@@ -46,7 +46,7 @@ class Bot:
         lot_size = (balance * self.balance_percentage * 0.01) * (self.sl_pips * 0.0001 * 10)
         return round(lot_size, 2)
     
-    def calculate_dynamic_sl(self, latest, multiplier):
+    def calculate_dynamic_sl(self, latest, multiplier, type):
         if type == 'buy':
             stoploss = latest['close'] - (latest['atr'] * multiplier)
         elif type == 'sell':
@@ -161,7 +161,7 @@ class Bot:
                 tp_price = ask_price + tp_pips if self.tp_pips else ask_price + (sl_pips * self.rr_ratio)
                 self.place_order('buy', lot_size, ask_price, sl_price, tp_price)
             elif not latest['bullish'] and latest['close'] > latest['ema']:
-                sl_price = self.calculate_dynamic_sl(latest, 1.5, 'buy') if not self.sl_pips else ask_price + sl_pips
+                sl_price = self.calculate_dynamic_sl(latest, 1.5, 'sell') if not self.sl_pips else ask_price + sl_pips
                 tp_price = bid_price - tp_pips if self.tp_pips else bid_price - (sl_pips * self.rr_ratio)
                 self.place_order('sell', lot_size, bid_price, sl_price, tp_price)
             

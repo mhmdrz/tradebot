@@ -4,7 +4,7 @@ import MetaTrader5 as mt5
 if __name__ == "__main__":
     bot = Bot(
         symbol="GBPUSD_o",
-        timeframe=mt5.TIMEFRAME_M1,
+        timeframe=mt5.TIMEFRAME_M3,
         balance_percentage=5,
         sl_pips=None,
         tp_pips=None,

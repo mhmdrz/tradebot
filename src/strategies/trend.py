@@ -19,7 +19,6 @@ def calculate_ema(data, period):
 def calculate_g(data, length):
     a = [0] * len(data)
     b = [0] * len(data)
-
     for i in range(1, len(data)):
         a[i] = max(data['close'][i], a[i-1]) - (a[i-1] - b[i-1]) / length
         b[i] = min(data['close'][i], b[i-1]) + (a[i-1] - b[i-1]) / length
@@ -30,6 +29,8 @@ def calculate_g(data, length):
 
     data['crossup'] = (data['b'].shift(1) < data['close'].shift(1)) & (data['b'] > data['close'])
     data['crossdn'] = (data['a'].shift(1) < data['close'].shift(1)) & (data['a'] > data['close'])
-    data['bullish'] = data.apply(lambda row: row['crossdn'] <= row['crossup'], axis=1)
+    data['barssince_crossup'] = (data['crossup'][::-1].cumsum() == 0).astype(int).cumsum()
+    data['barssince_crossdn'] = (data['crossdn'][::-1].cumsum() == 0).astype(int).cumsum()
+    data['bullish'] = data['barssince_crossdn'] > data['barssince_crossup']
 
     return data
